@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .game-container {
+            width: 900px;
+            height: 600px;
+            position: relative;
+            background: #f0f0f0;
+            border: 4px solid #333;
+            margin: 20px auto;
+            overflow: hidden;
+        }
+
+        .mechanical-arm {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 20px;
+            height: 100px;
+            background: #666;
+            transform-origin: top;
+            transition: all 0.5s ease;
+            z-index: 3;
+        }
+
+        .claw {
+            position: absolute;
+            bottom: -20px;
+            left: -10px;
+            width: 40px;
+            height: 20px;
+            background: #444;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .claw::before, .claw::after {
+            content: '';
+            width: 10px;
+            height: 20px;
+            background: #333;
+        }
+
+        .block {
+            width: 60px;
+            height: 60px;
+            position: absolute;
+            background: #4CAF50;
+            border: 3px solid #2E7D32;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 2;
+            box-sizing: border-box;
+        }
+
+        .column {
+            position: absolute;
+            bottom: 20px;
+            width: 70px;
+            height: 400px;
+            border-bottom: 4px solid #333;
+        }
+
+        .column-1 { left: 100px; }
+        .column-2 { left: 200px; }
+        .column-3 { left: 300px; }
+        
+        .target-area {
+            position: absolute;
+            bottom: 20px;
+            left: 450px;
+            width: 400px;
+            height: 80px;
+            border-bottom: 4px solid #333;
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-end;
+        }
+
+        .win-message {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-family: Arial, sans-serif;
+            color: #4CAF50;
+            text-shadow: 2px 2px #333;
+            z-index: 4;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            animation: pop 0.5s ease-out;
+        }
+
+        @keyframes pop {
+            0% { transform: translate(-50%, -50%) scale(0); }
+            70% { transform: translate(-50%, -50%) scale(1.1); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #f00;
+            animation: fall 3s linear infinite;
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-100vh) rotate(0deg); }
+            100% { transform: translateY(100vh) rotate(360deg); }
+        }
+
+        .column-highlight {
+            background: rgba(74, 185, 240, 0.1);
+            border: 2px dashed #4AB9F0;
+        }
+
+        .block-space {
+            width: 70px;
+            height: 70px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="mechanical-arm">
+            <div class="claw"></div>
+        </div>
+        <div class="column column-1" data-column="1"></div>
+        <div class="column column-2" data-column="2"></div>
+        <div class="column column-3" data-column="3"></div>
+        <div class="target-area"></div>
+        <div class="win-message">
+            🎉 Congratulations! 🎉<br>
+            You spelled "HAPPY DAY"!<br>
+            🌟 Well Done! 🌟
+        </div>
+    </div>
+
+    <script>
+        const letters = ['H', 'A', 'P', 'P', 'Y', ' ', 'D', 'A', 'Y'];
+        const targetWord = 'HAPPY DAY';
+        let selectedBlock = null;
+        let isMoving = false;
+        let selectedColumn = null;
+
+        function createConfetti() {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+            for(let i = 0; i < 50; i++) {
+                const confetti = document.createElement('div');
+                confetti.className = 'confetti';
+                confetti.style.left = Math.random() * 100 + '%';
+                confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDelay = Math.random() * 2 + 's';
+                document.querySelector('.game-container').appendChild(confetti);
+                
+                setTimeout(() => confetti.remove(), 3000);
+            }
+        }
+        
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function initializeBlocks() {
+            const shuffledLetters = shuffleArray([...letters]);
+            const columns = [
+                document.querySelector('.column-1'),
+                document.querySelector('.column-2'),
+                document.querySelector('.column-3')
+            ];
+            
+            let columnIndex = 0;
+            const blocksPerColumn = {};
+            columns.forEach(col => blocksPerColumn[col.className] = 0);
+            
+            shuffledLetters.forEach((letter, index) => {
+                if (letter === ' ') return; // Skip space character
+                
+                const block = document.createElement('div');
+                block.className = 'block';
+                block.textContent = letter;
+                
+                // Position block at the bottom of the column and stack upwards
+                const currentColumn = columns[columnIndex];
+                const bottomPosition = blocksPerColumn[currentColumn.className] * 66;
+                block.style.bottom = `${bottomPosition}px`;
+                block.style.left = '5px';
+                
+                currentColumn.appendChild(block);
+                
+                // Update block count for this column
+                blocksPerColumn[currentColumn.className]++;
+                
+                // Move to next column if current one has 3 blocks
+                if (blocksPerColumn[currentColumn.className] >= 3) {
+                    columnIndex = (columnIndex + 1) % 3;
+                }
+            });
+        }
+
+        function isBlockAtTop(block) {
+            const column = block.parentElement;
+            const blocks = Array.from(column.getElementsByClassName('block'));
+            const blockBottom = parseInt(block.style.bottom);
+            
+            for (let otherBlock of blocks) {
+                if (otherBlock === block) continue;
+                const otherBottom = parseInt(otherBlock.style.bottom);
+                if (otherBottom > blockBottom) return false;
+            }
+            return true;
+        }
+
+        function moveArm(x, y, callback) {
+            const arm = document.querySelector('.mechanical-arm');
+            arm.style.left = `${x}px`;
+            arm.style.height = `${y}px`;
+            
+            setTimeout(callback, 500);
+        }
+
+        function getColumnPosition(column) {
+            if (column.classList.contains('column-1')) return 100;
+            if (column.classList.contains('column-2')) return 200;
+            if (column.classList.contains('column-3')) return 300;
+            if (column.classList.contains('target-area')) return 450;
+            return 0;
+        }
+
+        function pickUpBlock(block) {
+            if (!isBlockAtTop(block)) return;
+            
+            const rect = block.getBoundingClientRect();
+            const containerRect = document.querySelector('.game-container').getBoundingClientRect();
+            const x = rect.left - containerRect.left;
+            const y = containerRect.height - (rect.top - containerRect.top);
+            
+            moveArm(x + 30, y, () => {
+                block.style.position = 'absolute';
+                block.style.left = '0';
+                block.style.bottom = '0';
+                document.querySelector('.claw').appendChild(block);
+                selectedBlock = block;
+
+                // Reposition remaining blocks in the column
+                rearrangeBlocks(block.parentElement);
+
+                document.querySelectorAll('.column, .target-area').forEach(col => {
+                    col.classList.add('column-highlight');
+                });
+            });
+        }
+
+        function rearrangeBlocks(column) {
+            if (!column) return;
+            
+            const blocks = Array.from(column.getElementsByClassName('block'));
+            blocks.sort((a, b) => parseInt(a.style.bottom) - parseInt(b.style.bottom));
+            
+            blocks.forEach((block, index) => {
+                block.style.bottom = `${index * 66}px`;
+            });
+        }
+
+        function getTopPosition(column) {
+            const blocks = Array.from(column.getElementsByClassName('block'));
+            return blocks.length * 66;
+        }
+
+        function dropBlock(targetElement) {
+            const block = document.querySelector('.claw .block');
+            if (!block) return;
+
+            const x = getColumnPosition(targetElement);
+            
+            if (targetElement.classList.contains('column')) {
+                const newBottom = getTopPosition(targetElement);
+                moveArm(x, 480 - newBottom, () => {
+                    block.style.position = 'absolute';
+                    block.style.left = '5px';
+                    block.style.bottom = `${newBottom}px`;
+                    targetElement.appendChild(block);
+                    selectedBlock = null;
+                    
+                    document.querySelectorAll('.column-highlight').forEach(col => {
+                        col.classList.remove('column-highlight');
+                    });
+
+                    // Ensure blocks are properly arranged after dropping
+                    rearrangeBlocks(targetElement);
+                    checkWin();
+                });
+            } else if (targetElement.classList.contains('target-area')) {
+                const blocks = targetElement.getElementsByClassName('block');
+                const x = 450 + (blocks.length * 70);
+                moveArm(x, 480, () => {
+                    block.style.position = 'relative';
+                    if (blocks.length === 5) {
+                        const spaceBlock = document.createElement('div');
+                        spaceBlock.className = 'block-space';
+                        targetElement.appendChild(spaceBlock);
+                    }
+                    targetElement.appendChild(block);
+                    selectedBlock = null;
+                    
+                    document.querySelectorAll('.column-highlight').forEach(col => {
+                        col.classList.remove('column-highlight');
+                    });
+
+                    checkWin();
+                });
+            }
+        }
+
+        function checkWin() {
+            const targetArea = document.querySelector('.target-area');
+            const blocks = targetArea.getElementsByClassName('block');
+            const currentWord = Array.from(blocks).map(block => block.textContent).join('');
+            const currentWordWithSpace = currentWord.slice(0, 5) + ' ' + currentWord.slice(5);
+            
+            if (currentWordWithSpace === targetWord) {
+                setTimeout(() => {
+                    document.querySelector('.win-message').style.display = 'block';
+                    createConfetti();
+                }, 500);
+            }
+        }
+
+        initializeBlocks();
+
+        document.addEventListener('click', (e) => {
+            if (isMoving) return;
+
+            if (e.target.classList.contains('block') && !document.querySelector('.claw .block')) {
+                isMoving = true;
+                pickUpBlock(e.target);
+                setTimeout(() => {
+                    isMoving = false;
+                }, 1000);
+            }
+            else if (selectedBlock && (
+                e.target.classList.contains('column') ||
+                e.target.classList.contains('target-area') ||
+                e.target.closest('.column') ||
+                e.target.closest('.target-area')
+            )) {
+                isMoving = true;
+                const targetElement = e.target.classList.contains('column') || e.target.classList.contains('target-area') 
+                    ? e.target 
+                    : e.target.closest('.column') || e.target.closest('.target-area');
+                dropBlock(targetElement);
+                setTimeout(() => {
+                    isMoving = false;
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>
